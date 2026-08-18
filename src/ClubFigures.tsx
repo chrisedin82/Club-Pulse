@@ -70,6 +70,16 @@ function ClubFigures({ session }: { session: Session }) {
       }
     }
     void load();
+    const refresh = () => void load();
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    const interval = window.setInterval(refresh, 10000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [session.user.id]);
 
   const dates = [...new Set(figures.map((figure) => figure.entry_date))];
@@ -93,9 +103,10 @@ function ClubFigures({ session }: { session: Session }) {
     return { ...config, value: actual, target, previous: prior, detail: `${reportLabel} actual figure` };
   });
   const visibleAreas = selectedArea === "All areas" ? areaData : areaData.filter((area) => area.name === selectedArea);
-  const totals = areaData.reduce((sum, area) => sum + area.value, 0);
-  const totalTarget = areaData.reduce((sum, area) => sum + area.target, 0);
-  const previousTotal = areaData.reduce((sum, area) => sum + area.previous, 0);
+  const financialAreas = areaData.filter((area) => area.name !== "Admissions");
+  const totals = financialAreas.reduce((sum, area) => sum + area.value, 0);
+  const totalTarget = financialAreas.reduce((sum, area) => sum + area.target, 0);
+  const previousTotal = financialAreas.reduce((sum, area) => sum + area.previous, 0);
   const variance = previousTotal ? ((totals - previousTotal) / previousTotal) * 100 : 0;
   const activity = latest.reduce((sum, figure) => sum + Number(figure.activity_count), 0);
   const targetVariance = totals - totalTarget;
@@ -149,8 +160,8 @@ function ClubFigures({ session }: { session: Session }) {
             <div className="area-card__top"><div className="area-card__icon">{area.icon}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
             <h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p>
             {area.name !== "Admissions" && area.name !== "Payroll" && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
-            <div className="area-card__metric"><strong>{money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(change).toFixed(1)}%</span> : <span className={area.value >= area.target ? "positive" : "negative"}>{money(area.value - area.target)}</span>}</div>
-            <div className="area-card__target"><div><span>Target</span><strong>{money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
+            <div className="area-card__metric"><strong>{area.name === "Admissions" ? area.value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(change).toFixed(1)}%</span> : <span className={area.value >= area.target ? "positive" : "negative"}>{area.name === "Admissions" ? (area.value - area.target).toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value - area.target)}</span>}</div>
+            <div className="area-card__target"><div><span>Target</span><strong>{area.name === "Admissions" ? area.target.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
             <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
           </article>;
         })}</div>

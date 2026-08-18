@@ -9,6 +9,7 @@ type Values = Record<string, Record<number, string>>;
 
 const periods = Array.from({ length: 12 }, (_, index) => index + 1);
 const money = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 2 });
+const wholeNumber = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
 
 function PeriodsPage({ session }: { session: Session }) {
   const [metrics, setMetrics] = useState<Metric[]>([]);
@@ -46,8 +47,8 @@ function PeriodsPage({ session }: { session: Session }) {
     void initialise();
   }, [session.user.id]);
 
-  const periodTotals = useMemo(() => periods.map((period) => metrics.reduce((sum, metric) => sum + Number(values[metric.id]?.[period] || 0), 0)), [metrics, values]);
-  const targetTotals = useMemo(() => periods.map((period) => metrics.reduce((sum, metric) => sum + Number(targets[metric.id]?.[period] || 0), 0)), [metrics, targets]);
+  const periodTotals = useMemo(() => periods.map((period) => metrics.filter((metric) => metric.name !== "Admissions").reduce((sum, metric) => sum + Number(values[metric.id]?.[period] || 0), 0)), [metrics, values]);
+  const targetTotals = useMemo(() => periods.map((period) => metrics.filter((metric) => metric.name !== "Admissions").reduce((sum, metric) => sum + Number(targets[metric.id]?.[period] || 0), 0)), [metrics, targets]);
 
   function updateValue(metricId: string, period: number, value: string) {
     setValues((current) => ({ ...current, [metricId]: { ...current[metricId], [period]: value } }));
@@ -103,7 +104,7 @@ function PeriodsPage({ session }: { session: Session }) {
         <div className="period-table-wrap">
           <table className="period-table">
             <thead><tr><th scope="col">Club area</th>{periods.map((period) => <th scope="col" key={period}>P{period}</th>)}<th scope="col">Total</th></tr></thead>
-              <tbody>{metrics.map((metric) => <tr key={metric.id}><th scope="row">{metric.name}</th>{periods.map((period) => <td key={period}><label><span className="sr-only">{metric.name} P{period} in pounds</span><span className="currency-input"><span aria-hidden="true">£</span><input aria-label={`${metric.name} P${period} in pounds`} type="number" min="0" step="0.01" inputMode="decimal" value={values[metric.id]?.[period] ?? ""} onChange={(event) => updateValue(metric.id, period, event.target.value)} /></span></label></td>)}<td className="period-total">{money.format(periods.reduce((sum, period) => sum + Number(values[metric.id]?.[period] || 0), 0))}</td></tr>)}</tbody>
+              <tbody>{metrics.map((metric) => <tr key={metric.id}><th scope="row">{metric.name}</th>{periods.map((period) => <td key={period}><label><span className="sr-only">{metric.name} P{period}</span>{metric.name === "Admissions" ? <input className="plain-number-input" aria-label={`Admissions P${period}`} type="number" min="0" step="1" inputMode="numeric" value={values[metric.id]?.[period] ?? ""} onChange={(event) => updateValue(metric.id, period, event.target.value)} /> : <span className="currency-input"><span aria-hidden="true">£</span><input aria-label={`${metric.name} P${period} in pounds`} type="number" min="0" step="0.01" inputMode="decimal" value={values[metric.id]?.[period] ?? ""} onChange={(event) => updateValue(metric.id, period, event.target.value)} /></span>}</label></td>)}<td className="period-total">{metric.name === "Admissions" ? wholeNumber.format(periods.reduce((sum, period) => sum + Number(values[metric.id]?.[period] || 0), 0)) : money.format(periods.reduce((sum, period) => sum + Number(values[metric.id]?.[period] || 0), 0))}</td></tr>)}</tbody>
             <tfoot><tr><th scope="row">Period total</th>{periodTotals.map((total, index) => <td key={periods[index]}>{money.format(total)}</td>)}<td>{money.format(periodTotals.reduce((sum, total) => sum + total, 0))}</td></tr></tfoot>
           </table>
         </div>
@@ -115,7 +116,7 @@ function PeriodsPage({ session }: { session: Session }) {
           <div className="period-table-wrap period-table-wrap--targets">
             <table className="period-table period-table--targets">
               <thead><tr><th scope="col">Club area</th>{periods.map((period) => <th scope="col" key={period}>P{period}</th>)}<th scope="col">Total</th></tr></thead>
-              <tbody>{metrics.map((metric) => <tr key={metric.id}><th scope="row">{metric.name}</th>{periods.map((period) => <td key={period}><label><span className="sr-only">{metric.name} P{period} target in pounds</span><span className="currency-input"><span aria-hidden="true">£</span><input aria-label={`${metric.name} P${period} target in pounds`} type="number" min="0" step="0.01" inputMode="decimal" value={targets[metric.id]?.[period] ?? ""} onChange={(event) => updateTarget(metric.id, period, event.target.value)} /></span></label></td>)}<td className="period-total">{money.format(periods.reduce((sum, period) => sum + Number(targets[metric.id]?.[period] || 0), 0))}</td></tr>)}</tbody>
+              <tbody>{metrics.map((metric) => <tr key={metric.id}><th scope="row">{metric.name}</th>{periods.map((period) => <td key={period}><label><span className="sr-only">{metric.name} P{period} target</span>{metric.name === "Admissions" ? <input className="plain-number-input" aria-label={`Admissions P${period} target`} type="number" min="0" step="1" inputMode="numeric" value={targets[metric.id]?.[period] ?? ""} onChange={(event) => updateTarget(metric.id, period, event.target.value)} /> : <span className="currency-input"><span aria-hidden="true">£</span><input aria-label={`${metric.name} P${period} target in pounds`} type="number" min="0" step="0.01" inputMode="decimal" value={targets[metric.id]?.[period] ?? ""} onChange={(event) => updateTarget(metric.id, period, event.target.value)} /></span>}</label></td>)}<td className="period-total">{metric.name === "Admissions" ? wholeNumber.format(periods.reduce((sum, period) => sum + Number(targets[metric.id]?.[period] || 0), 0)) : money.format(periods.reduce((sum, period) => sum + Number(targets[metric.id]?.[period] || 0), 0))}</td></tr>)}</tbody>
               <tfoot><tr><th scope="row">Target total</th>{targetTotals.map((total, index) => <td key={periods[index]}>{money.format(total)}</td>)}<td>{money.format(targetTotals.reduce((sum, total) => sum + total, 0))}</td></tr></tfoot>
             </table>
           </div>
