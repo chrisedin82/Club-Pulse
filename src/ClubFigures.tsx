@@ -126,6 +126,27 @@ function ClubFigures({ session }: { session: Session }) {
     const favourableChange = isPayroll ? -change : change;
     const performanceVariance = isPayroll ? area.target - area.value : area.value - area.target;
     const onTarget = area.target > 0 && (isPayroll ? area.value <= area.target : achieved >= 100);
+    const isHeadline = area.name === "Admissions" || isPayroll;
+    const formatFigure = (value: number) => area.name === "Admissions" ? value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(value);
+
+    if (isHeadline) {
+      const varianceLabel = isPayroll ? (performanceVariance >= 0 ? "Underspend" : "Overspend") : "Variance";
+      const varianceFigure = isPayroll ? money(Math.abs(performanceVariance)) : formatFigure(performanceVariance);
+
+      return <article className="area-card area-card--headline" key={area.name} style={{ "--area-colour": area.colour, "--area-soft": area.softColour } as React.CSSProperties}>
+        <div className="headline-card__header">
+          <div className="headline-card__title"><div className="area-card__icon">{area.icon}</div><div><h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p></div></div>
+          <span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span>
+        </div>
+        <div className="headline-card__figures">
+          <div><span>Actual</span><strong>{formatFigure(area.value)}</strong></div>
+          <div><span>Target</span><strong>{formatFigure(area.target)}</strong></div>
+          <div><span>{varianceLabel}</span><strong className={performanceVariance >= 0 ? "positive" : "negative"}>{varianceFigure}</strong></div>
+        </div>
+        <div className="headline-card__progress"><span>{Math.round(achieved)}% achieved</span><div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div></div>
+      </article>;
+    }
+
     return <article className="area-card" key={area.name} style={{ "--area-colour": area.colour, "--area-soft": area.softColour } as React.CSSProperties}>
       <div className="area-card__top"><div className="area-card__icon">{area.icon}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
       <h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p>
