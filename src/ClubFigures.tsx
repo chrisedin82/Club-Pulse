@@ -31,6 +31,10 @@ function money(value: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(value);
 }
 
+function moneyPerHead(value: number) {
+  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
 function ClubFigures({ session }: { session: Session }) {
   const [selectedArea, setSelectedArea] = useState("All areas");
   const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriod>("latest");
@@ -96,6 +100,7 @@ function ClubFigures({ session }: { session: Session }) {
   const activity = latest.reduce((sum, figure) => sum + Number(figure.activity_count), 0);
   const targetVariance = totals - totalTarget;
   const areasOnTarget = areaData.filter((area) => area.target > 0 && area.value >= area.target).length;
+  const admissions = areaData.find((area) => area.name === "Admissions")?.value ?? 0;
   const introText = reportingPeriod === "latest"
     ? (dates[0] ? `Latest figures: ${new Date(`${dates[0]}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "Enter your first figures to get started.")
     : `${reportLabel} actual figures compared with targets.`;
@@ -143,6 +148,7 @@ function ClubFigures({ session }: { session: Session }) {
           return <article className="area-card" key={area.name} style={{ "--area-colour": area.colour, "--area-soft": area.softColour } as React.CSSProperties}>
             <div className="area-card__top"><div className="area-card__icon">{area.icon}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
             <h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p>
+            {area.name !== "Admissions" && area.name !== "Payroll" && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
             <div className="area-card__metric"><strong>{money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(change).toFixed(1)}%</span> : <span className={area.value >= area.target ? "positive" : "negative"}>{money(area.value - area.target)}</span>}</div>
             <div className="area-card__target"><div><span>Target</span><strong>{money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
             <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
