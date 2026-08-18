@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, CheckCircle2, History, LogOut, Save, Sparkles } from "lucide-react";
+import { ArrowLeft, CalendarRange, CheckCircle2, History, LogOut, Save, Sparkles } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { CLUB_AREAS, type ClubArea, type ClubFigure } from "./types";
 
@@ -68,7 +68,7 @@ function AdminPage({ session }: { session: Session }) {
 
   const dates = [...new Set(history.map((row) => row.entry_date))];
   return <main className="admin-shell">
-    <header className="admin-header"><a className="club-pulse__brand" href="/"><span className="club-pulse__brand-mark"><Sparkles size={22} /></span><span><strong>Club</strong> Pulse</span></a><div><a href="/"><ArrowLeft size={16} /> Dashboard</a><button onClick={() => void supabase.auth.signOut()}><LogOut size={16} /> Sign out</button></div></header>
+    <header className="admin-header"><a className="club-pulse__brand" href="/"><span className="club-pulse__brand-mark"><Sparkles size={22} /></span><span><strong>Club</strong> Pulse</span></a><div><a href="/admin/periods"><CalendarRange size={16} /> P1–P12 figures</a><a href="/"><ArrowLeft size={16} /> Dashboard</a><button onClick={() => void supabase.auth.signOut()}><LogOut size={16} /> Sign out</button></div></header>
     <section className="admin-content">
       <div className="admin-title"><div><p>MANAGER ENTRY</p><h1>Update club figures</h1><span>Enter one complete set of figures for each trading date.</span></div><label>Trading date<input type="date" value={entryDate} onChange={(event) => void loadDate(event.target.value)} /></label></div>
       <form onSubmit={saveFigures}>

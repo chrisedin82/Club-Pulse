@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, CircleDollarSign,
-  Download, LayoutGrid, LogOut, PencilLine, Sparkles, Target, TrendingUp, Users,
+  Download, LayoutGrid, LogOut, PencilLine, Sparkles, Target, TrendingUp, Users, CalendarRange,
 } from "lucide-react";
 import "./ClubFigures.css";
 import { supabase } from "./lib/supabase";
@@ -66,6 +66,7 @@ function ClubFigures({ session }: { session: Session }) {
     <header className="club-pulse__header">
       <a className="club-pulse__brand" href="/" aria-label="Club Pulse home"><span className="club-pulse__brand-mark"><Sparkles size={22} /></span><span><strong>Club</strong> Pulse</span></a>
       <div className="club-pulse__header-actions">
+        {authorised && <a className="club-pulse__admin-link club-pulse__period-link" href="/admin/periods"><CalendarRange size={16} /> P1–P12 figures</a>}
         {authorised && <a className="club-pulse__admin-link" href="/admin"><PencilLine size={16} /> Update figures</a>}
         <button className="club-pulse__profile" aria-label="Signed-in manager"><span>CM</span><div><strong>Club Manager</strong><small>{session.user.email}</small></div></button>
         <button className="club-pulse__icon-button" aria-label="Sign out" onClick={() => void supabase.auth.signOut()}><LogOut size={19} /></button>

@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { LockKeyhole, Sparkles } from "lucide-react";
 import ClubFigures from "./ClubFigures";
 import AdminPage from "./AdminPage";
+import PeriodsPage from "./PeriodsPage";
 import { supabase } from "./lib/supabase";
 
 function App() {
@@ -64,9 +65,9 @@ function App() {
     </main>;
   }
 
-  return window.location.pathname.startsWith("/admin")
-    ? <AdminPage session={session} />
-    : <ClubFigures session={session} />;
+  if (window.location.pathname.startsWith("/admin/periods")) return <PeriodsPage session={session} />;
+  if (window.location.pathname.startsWith("/admin")) return <AdminPage session={session} />;
+  return <ClubFigures session={session} />;
 }
 
 export default App;
