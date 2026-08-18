@@ -12,6 +12,9 @@ type Area = {
   name: string; shortName: string; value: number; target: number; previous: number;
   colour: string; softColour: string; icon: string; detail: string;
 };
+type Metric = { id: string; name: string; display_order: number };
+type PeriodValue = { metric_id: string; period: number; amount: number };
+type ReportingPeriod = "latest" | "ytd" | `p${number}`;
 
 const areaConfig = [
   { name: "Main Stage Bingo", shortName: "Main Stage", colour: "#f054a3", softColour: "#ffe4f2", icon: "B" },
@@ -19,7 +22,10 @@ const areaConfig = [
   { name: "Bar", shortName: "Bar", colour: "#f59e0b", softColour: "#fef3c7", icon: "B" },
   { name: "Diner", shortName: "Diner", colour: "#22c55e", softColour: "#dcfce7", icon: "D" },
   { name: "Slots", shortName: "Slots", colour: "#0ea5e9", softColour: "#e0f2fe", icon: "S" },
+  { name: "Admissions", shortName: "Admissions", colour: "#14b8a6", softColour: "#ccfbf1", icon: "A" },
+  { name: "Payroll", shortName: "Payroll", colour: "#64748b", softColour: "#e2e8f0", icon: "P" },
 ];
+const periods = Array.from({ length: 12 }, (_, index) => index + 1);
 
 function money(value: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(value);
@@ -27,7 +33,11 @@ function money(value: number) {
 
 function ClubFigures({ session }: { session: Session }) {
   const [selectedArea, setSelectedArea] = useState("All areas");
+  const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriod>("latest");
   const [figures, setFigures] = useState<ClubFigure[]>([]);
+  const [metrics, setMetrics] = useState<Metric[]>([]);
+  const [periodValues, setPeriodValues] = useState<PeriodValue[]>([]);
+  const [periodTargets, setPeriodTargets] = useState<PeriodValue[]>([]);
   const [message, setMessage] = useState("Loading figures…");
   const [authorised, setAuthorised] = useState(false);
 
@@ -39,9 +49,21 @@ function ClubFigures({ session }: { session: Session }) {
         return;
       }
       setAuthorised(true);
-      const { data, error } = await supabase.from("club_figures").select("*").order("entry_date", { ascending: false });
+      const [dailyResult, metricResult, actualResult, targetResult] = await Promise.all([
+        supabase.from("club_figures").select("*").order("entry_date", { ascending: false }),
+        supabase.from("pnl_metrics").select("id,name,display_order").order("display_order"),
+        supabase.from("pnl_period_values").select("metric_id,period,amount"),
+        supabase.from("pnl_period_targets").select("metric_id,period,amount"),
+      ]);
+      const error = dailyResult.error ?? metricResult.error ?? actualResult.error ?? targetResult.error;
       if (error) setMessage(error.message);
-      else { setFigures((data ?? []) as ClubFigure[]); setMessage(""); }
+      else {
+        setFigures((dailyResult.data ?? []) as ClubFigure[]);
+        setMetrics((metricResult.data ?? []) as Metric[]);
+        setPeriodValues((actualResult.data ?? []) as PeriodValue[]);
+        setPeriodTargets((targetResult.data ?? []) as PeriodValue[]);
+        setMessage("");
+      }
     }
     void load();
   }, [session.user.id]);
@@ -49,11 +71,22 @@ function ClubFigures({ session }: { session: Session }) {
   const dates = [...new Set(figures.map((figure) => figure.entry_date))];
   const latest = figures.filter((figure) => figure.entry_date === dates[0]);
   const previous = figures.filter((figure) => figure.entry_date === dates[1]);
+  const selectedPeriodNumber = reportingPeriod.startsWith("p") ? Number(reportingPeriod.slice(1)) : null;
+  const includedPeriods = reportingPeriod === "ytd" ? periods : selectedPeriodNumber ? [selectedPeriodNumber] : [];
+  const reportLabel = reportingPeriod === "latest" ? "Latest entry" : reportingPeriod === "ytd" ? "Year to Date" : `Period ${selectedPeriodNumber}`;
   const areaData: Area[] = areaConfig.map((config) => {
-    const current = latest.find((figure) => figure.area === config.name);
-    const prior = previous.find((figure) => figure.area === config.name);
-    const label = config.name.includes("Bingo") ? "books sold" : config.name === "Diner" ? "meals served" : "activity count";
-    return { ...config, value: Number(current?.revenue ?? 0), target: Number(current?.target ?? 0), previous: Number(prior?.revenue ?? current?.revenue ?? 0), detail: `${Number(current?.activity_count ?? 0).toLocaleString("en-GB")} ${label}` };
+    if (reportingPeriod === "latest") {
+      const current = latest.find((figure) => figure.area === config.name);
+      const prior = previous.find((figure) => figure.area === config.name);
+      const label = config.name.includes("Bingo") ? "books sold" : config.name === "Diner" ? "meals served" : "activity count";
+      return { ...config, value: Number(current?.revenue ?? 0), target: Number(current?.target ?? 0), previous: Number(prior?.revenue ?? current?.revenue ?? 0), detail: `${Number(current?.activity_count ?? 0).toLocaleString("en-GB")} ${label}` };
+    }
+    const metric = metrics.find((row) => row.name === config.name);
+    const actual = periodValues.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
+    const target = periodTargets.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
+    const priorPeriod = selectedPeriodNumber && selectedPeriodNumber > 1 ? selectedPeriodNumber - 1 : null;
+    const prior = priorPeriod ? periodValues.filter((row) => row.metric_id === metric?.id && row.period === priorPeriod).reduce((sum, row) => sum + Number(row.amount), 0) : actual;
+    return { ...config, value: actual, target, previous: prior, detail: `${reportLabel} actual figure` };
   });
   const visibleAreas = selectedArea === "All areas" ? areaData : areaData.filter((area) => area.name === selectedArea);
   const totals = areaData.reduce((sum, area) => sum + area.value, 0);
@@ -61,6 +94,11 @@ function ClubFigures({ session }: { session: Session }) {
   const previousTotal = areaData.reduce((sum, area) => sum + area.previous, 0);
   const variance = previousTotal ? ((totals - previousTotal) / previousTotal) * 100 : 0;
   const activity = latest.reduce((sum, figure) => sum + Number(figure.activity_count), 0);
+  const targetVariance = totals - totalTarget;
+  const areasOnTarget = areaData.filter((area) => area.target > 0 && area.value >= area.target).length;
+  const introText = reportingPeriod === "latest"
+    ? (dates[0] ? `Latest figures: ${new Date(`${dates[0]}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "Enter your first figures to get started.")
+    : `${reportLabel} actual figures compared with targets.`;
 
   return <main className="club-pulse">
     <header className="club-pulse__header">
@@ -76,19 +114,24 @@ function ClubFigures({ session }: { session: Session }) {
     <section className="club-pulse__content">
       {message && <div className="club-pulse__notice" role="status">{message}</div>}
       <div className="club-pulse__intro">
-        <div><p className="club-pulse__eyebrow"><span /> SECURE PERFORMANCE DASHBOARD</p><h1>Your club at a glance</h1><p>{dates[0] ? `Latest figures: ${new Date(`${dates[0]}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "Enter your first figures to get started."}</p></div>
+        <div><p className="club-pulse__eyebrow"><span /> SECURE PERFORMANCE DASHBOARD</p><h1>Your club at a glance</h1><p>{introText}</p></div>
         <div className="club-pulse__filters">
           <label><LayoutGrid size={17} /><select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)}><option>All areas</option>{areaData.map((area) => <option key={area.name}>{area.name}</option>)}</select><ChevronDown size={15} /></label>
-          <label><CalendarDays size={17} /><select aria-label="Reporting period"><option>Latest entry</option></select><ChevronDown size={15} /></label>
+          <label><CalendarDays size={17} /><select aria-label="Reporting period" value={reportingPeriod} onChange={(event) => setReportingPeriod(event.target.value as ReportingPeriod)}><option value="latest">Latest entry</option>{periods.map((period) => <option value={`p${period}`} key={period}>Period {period}</option>)}<option value="ytd">Year to Date</option></select><ChevronDown size={15} /></label>
           <button className="club-pulse__export" onClick={() => window.print()}><Download size={17} /> Export</button>
         </div>
       </div>
 
       <div className="club-pulse__summary">
-        <article className="summary-card summary-card--hero"><div className="summary-card__label"><span><CircleDollarSign size={18} /></span>Total club revenue</div><div className="summary-card__value">{money(totals)}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> {variance.toFixed(1)}%</strong><span>vs previous entry</span></div><div className="summary-card__glow" /></article>
+        <article className="summary-card summary-card--hero"><div className="summary-card__label"><span><CircleDollarSign size={18} /></span>Total actual</div><div className="summary-card__value">{money(totals)}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> {reportingPeriod === "latest" ? `${variance.toFixed(1)}%` : reportLabel}</strong><span>{reportingPeriod === "latest" ? "vs previous entry" : "selected report"}</span></div><div className="summary-card__glow" /></article>
         <article className="summary-card"><div className="summary-card__label"><span className="mint"><Target size={18} /></span>Total target</div><div className="summary-card__value dark">{money(totalTarget)}</div><div className="summary-card__progress"><span style={{ width: `${totalTarget ? Math.min((totals / totalTarget) * 100, 100) : 0}%` }} /></div><div className="summary-card__foot neutral"><strong>{totalTarget ? Math.round((totals / totalTarget) * 100) : 0}% achieved</strong><span>{money(totals - totalTarget)} variance</span></div></article>
-        <article className="summary-card"><div className="summary-card__label"><span className="blue"><Users size={18} /></span>Total activity</div><div className="summary-card__value dark">{activity.toLocaleString("en-GB")}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> Live</strong><span>latest entry</span></div></article>
-        <article className="summary-card"><div className="summary-card__label"><span className="amber"><TrendingUp size={18} /></span>Revenue per activity</div><div className="summary-card__value dark">{activity ? money(totals / activity) : money(0)}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> Live</strong><span>latest entry</span></div></article>
+        {reportingPeriod === "latest" ? <>
+          <article className="summary-card"><div className="summary-card__label"><span className="blue"><Users size={18} /></span>Total activity</div><div className="summary-card__value dark">{activity.toLocaleString("en-GB")}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> Live</strong><span>latest entry</span></div></article>
+          <article className="summary-card"><div className="summary-card__label"><span className="amber"><TrendingUp size={18} /></span>Revenue per activity</div><div className="summary-card__value dark">{activity ? money(totals / activity) : money(0)}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> Live</strong><span>latest entry</span></div></article>
+        </> : <>
+          <article className="summary-card"><div className="summary-card__label"><span className="blue"><TrendingUp size={18} /></span>Variance to target</div><div className="summary-card__value dark">{money(targetVariance)}</div><div className="summary-card__foot neutral"><strong>{targetVariance >= 0 ? "Ahead" : "Behind"}</strong><span>{reportLabel}</span></div></article>
+          <article className="summary-card"><div className="summary-card__label"><span className="amber"><Target size={18} /></span>Areas on target</div><div className="summary-card__value dark">{areasOnTarget} / {areaData.length}</div><div className="summary-card__foot neutral"><strong>{reportLabel}</strong><span>club areas</span></div></article>
+        </>}
       </div>
 
       <section className="club-pulse__areas">
@@ -96,11 +139,11 @@ function ClubFigures({ session }: { session: Session }) {
         <div className="area-grid">{visibleAreas.map((area) => {
           const achieved = area.target ? (area.value / area.target) * 100 : 0;
           const change = area.previous ? ((area.value - area.previous) / area.previous) * 100 : 0;
-          const onTarget = achieved >= 100;
+          const onTarget = area.target > 0 && achieved >= 100;
           return <article className="area-card" key={area.name} style={{ "--area-colour": area.colour, "--area-soft": area.softColour } as React.CSSProperties}>
             <div className="area-card__top"><div className="area-card__icon">{area.icon}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
             <h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p>
-            <div className="area-card__metric"><strong>{money(area.value)}</strong><span className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(change).toFixed(1)}%</span></div>
+            <div className="area-card__metric"><strong>{money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(change).toFixed(1)}%</span> : <span className={area.value >= area.target ? "positive" : "negative"}>{money(area.value - area.target)}</span>}</div>
             <div className="area-card__target"><div><span>Target</span><strong>{money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
             <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
           </article>;
