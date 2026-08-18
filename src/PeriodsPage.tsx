@@ -13,6 +13,7 @@ const money = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP
 function PeriodsPage({ session }: { session: Session }) {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [values, setValues] = useState<Values>({});
+  const [targets, setTargets] = useState<Values>({});
   const [authorised, setAuthorised] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -23,28 +24,37 @@ function PeriodsPage({ session }: { session: Session }) {
       setAuthorised(Boolean(access));
       if (!access) return;
 
-      const [{ data: metricRows, error: metricError }, { data: periodRows, error: periodError }] = await Promise.all([
+      const [{ data: metricRows, error: metricError }, { data: periodRows, error: periodError }, { data: targetRows, error: targetError }] = await Promise.all([
         supabase.from("pnl_metrics").select("id,name,display_order").order("display_order"),
         supabase.from("pnl_period_values").select("metric_id,period,amount"),
+        supabase.from("pnl_period_targets").select("metric_id,period,amount"),
       ]);
-      if (metricError || periodError) {
-        setMessage(metricError?.message ?? periodError?.message ?? "The figures could not be loaded.");
+      if (metricError || periodError || targetError) {
+        setMessage(metricError?.message ?? periodError?.message ?? targetError?.message ?? "The figures could not be loaded.");
         return;
       }
 
       const loadedMetrics = (metricRows ?? []) as Metric[];
       const next: Values = Object.fromEntries(loadedMetrics.map((metric) => [metric.id, Object.fromEntries(periods.map((period) => [period, ""]))]));
+      const nextTargets: Values = Object.fromEntries(loadedMetrics.map((metric) => [metric.id, Object.fromEntries(periods.map((period) => [period, ""]))]));
       ((periodRows ?? []) as PeriodValue[]).forEach((row) => { next[row.metric_id][row.period] = String(row.amount); });
+      ((targetRows ?? []) as PeriodValue[]).forEach((row) => { nextTargets[row.metric_id][row.period] = String(row.amount); });
       setMetrics(loadedMetrics);
       setValues(next);
+      setTargets(nextTargets);
     }
     void initialise();
   }, [session.user.id]);
 
   const periodTotals = useMemo(() => periods.map((period) => metrics.reduce((sum, metric) => sum + Number(values[metric.id]?.[period] || 0), 0)), [metrics, values]);
+  const targetTotals = useMemo(() => periods.map((period) => metrics.reduce((sum, metric) => sum + Number(targets[metric.id]?.[period] || 0), 0)), [metrics, targets]);
 
   function updateValue(metricId: string, period: number, value: string) {
     setValues((current) => ({ ...current, [metricId]: { ...current[metricId], [period]: value } }));
+  }
+
+  function updateTarget(metricId: string, period: number, value: string) {
+    setTargets((current) => ({ ...current, [metricId]: { ...current[metricId], [period]: value } }));
   }
 
   async function saveFigures(event: React.FormEvent) {
@@ -61,6 +71,23 @@ function PeriodsPage({ session }: { session: Session }) {
     })));
     const { error } = await supabase.from("pnl_period_values").upsert(rows, { onConflict: "metric_id,period" });
     setMessage(error ? error.message : "All P1–P12 figures saved successfully.");
+    setSaving(false);
+  }
+
+  async function saveTargets(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    const now = new Date().toISOString();
+    const rows = metrics.flatMap((metric) => periods.map((period) => ({
+      metric_id: metric.id,
+      period,
+      amount: Number(targets[metric.id]?.[period] || 0),
+      updated_by: session.user.id,
+      updated_at: now,
+    })));
+    const { error } = await supabase.from("pnl_period_targets").upsert(rows, { onConflict: "metric_id,period" });
+    setMessage(error ? error.message : "All P1–P12 target figures saved successfully.");
     setSaving(false);
   }
 
@@ -82,6 +109,19 @@ function PeriodsPage({ session }: { session: Session }) {
         </div>
         <div className="admin-save period-save"><span>Figures are stored in the separate Club Pulse database.</span><button type="submit" disabled={saving || metrics.length === 0}><Save size={17} />{saving ? "Saving…" : "Save P1–P12 figures"}</button></div>
       </form>
+      <section className="period-target-section">
+        <div className="period-section-title"><p>PERIOD TARGETS</p><h2>Editable P1–P12 target figures</h2><span>Set the target for each club area and period.</span></div>
+        <form onSubmit={saveTargets}>
+          <div className="period-table-wrap period-table-wrap--targets">
+            <table className="period-table period-table--targets">
+              <thead><tr><th scope="col">Club area</th>{periods.map((period) => <th scope="col" key={period}>P{period}</th>)}<th scope="col">Total</th></tr></thead>
+              <tbody>{metrics.map((metric) => <tr key={metric.id}><th scope="row">{metric.name}</th>{periods.map((period) => <td key={period}><label><span className="sr-only">{metric.name} P{period} target</span><input aria-label={`${metric.name} P${period} target`} type="number" min="0" step="0.01" value={targets[metric.id]?.[period] ?? ""} onChange={(event) => updateTarget(metric.id, period, event.target.value)} /></label></td>)}<td className="period-total">{money.format(periods.reduce((sum, period) => sum + Number(targets[metric.id]?.[period] || 0), 0))}</td></tr>)}</tbody>
+              <tfoot><tr><th scope="row">Target total</th>{targetTotals.map((total, index) => <td key={periods[index]}>{money.format(total)}</td>)}<td>{money.format(targetTotals.reduce((sum, total) => sum + total, 0))}</td></tr></tfoot>
+            </table>
+          </div>
+          <div className="admin-save period-save"><span>Targets are saved separately from actual figures.</span><button type="submit" disabled={saving || metrics.length === 0}><Save size={17} />{saving ? "Saving…" : "Save target figures"}</button></div>
+        </form>
+      </section>
     </section>
   </main>;
 }
