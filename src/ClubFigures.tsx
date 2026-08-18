@@ -116,6 +116,25 @@ function ClubFigures({ session }: { session: Session }) {
   const introText = reportingPeriod === "latest"
     ? (dates[0] ? `Latest figures: ${new Date(`${dates[0]}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "Enter your first figures to get started.")
     : `${reportLabel} actual figures compared with targets.`;
+  const headlineAreas = visibleAreas.filter((area) => area.name === "Admissions" || area.name === "Payroll");
+  const salesAreas = visibleAreas.filter((area) => area.name !== "Admissions" && area.name !== "Payroll");
+
+  function renderAreaCard(area: Area) {
+    const achieved = area.target ? (area.value / area.target) * 100 : 0;
+    const change = area.previous ? ((area.value - area.previous) / area.previous) * 100 : 0;
+    const isPayroll = area.name === "Payroll";
+    const favourableChange = isPayroll ? -change : change;
+    const performanceVariance = isPayroll ? area.target - area.value : area.value - area.target;
+    const onTarget = area.target > 0 && (isPayroll ? area.value <= area.target : achieved >= 100);
+    return <article className="area-card" key={area.name} style={{ "--area-colour": area.colour, "--area-soft": area.softColour } as React.CSSProperties}>
+      <div className="area-card__top"><div className="area-card__icon">{area.icon}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
+      <h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p>
+      {area.name !== "Admissions" && area.name !== "Payroll" && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
+      <div className="area-card__metric"><strong>{area.name === "Admissions" ? area.value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={favourableChange >= 0 ? "positive" : "negative"}>{favourableChange >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(favourableChange).toFixed(1)}%</span> : <span className={performanceVariance >= 0 ? "positive" : "negative"}>{area.name === "Admissions" ? performanceVariance.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : isPayroll ? `${money(Math.abs(performanceVariance))} ${performanceVariance >= 0 ? "underspend" : "overspend"}` : money(performanceVariance)}</span>}</div>
+      <div className="area-card__target"><div><span>Target</span><strong>{area.name === "Admissions" ? area.target.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
+      <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
+    </article>;
+  }
 
   return <main className="club-pulse">
     <header className="club-pulse__header">
@@ -153,22 +172,8 @@ function ClubFigures({ session }: { session: Session }) {
 
       <section className="club-pulse__areas">
         <div className="club-pulse__section-title"><div><p>AREA PERFORMANCE</p><h2>How each area is doing</h2></div><div className="performance-key"><span className="great" /> On target <span className="watch" /> Needs attention</div></div>
-        <div className="area-grid">{visibleAreas.map((area) => {
-          const achieved = area.target ? (area.value / area.target) * 100 : 0;
-          const change = area.previous ? ((area.value - area.previous) / area.previous) * 100 : 0;
-          const isPayroll = area.name === "Payroll";
-          const favourableChange = isPayroll ? -change : change;
-          const performanceVariance = isPayroll ? area.target - area.value : area.value - area.target;
-          const onTarget = area.target > 0 && (isPayroll ? area.value <= area.target : achieved >= 100);
-          return <article className="area-card" key={area.name} style={{ "--area-colour": area.colour, "--area-soft": area.softColour } as React.CSSProperties}>
-            <div className="area-card__top"><div className="area-card__icon">{area.icon}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
-            <h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p>
-            {area.name !== "Admissions" && area.name !== "Payroll" && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
-            <div className="area-card__metric"><strong>{area.name === "Admissions" ? area.value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={favourableChange >= 0 ? "positive" : "negative"}>{favourableChange >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(favourableChange).toFixed(1)}%</span> : <span className={performanceVariance >= 0 ? "positive" : "negative"}>{area.name === "Admissions" ? performanceVariance.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : isPayroll ? `${money(Math.abs(performanceVariance))} ${performanceVariance >= 0 ? "underspend" : "overspend"}` : money(performanceVariance)}</span>}</div>
-            <div className="area-card__target"><div><span>Target</span><strong>{area.name === "Admissions" ? area.target.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
-            <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
-          </article>;
-        })}</div>
+        {headlineAreas.length > 0 && <div className="area-grid area-grid--headline">{headlineAreas.map(renderAreaCard)}</div>}
+        {salesAreas.length > 0 && <div className="area-grid area-grid--sales">{salesAreas.map(renderAreaCard)}</div>}
       </section>
     </section>
   </main>;
