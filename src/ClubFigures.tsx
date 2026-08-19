@@ -193,7 +193,10 @@ function ClubFigures({ session }: { session: Session }) {
 
       <section className="club-pulse__areas">
         <div className="club-pulse__section-title"><div><p>AREA PERFORMANCE</p><h2>How each area is doing</h2></div><div className="performance-key"><span className="great" /> On target <span className="watch" /> Needs attention</div></div>
-        {headlineAreas.length > 0 && <div className="area-grid area-grid--headline">{headlineAreas.map(renderAreaCard)}</div>}
+        {headlineAreas.length > 0 && <div className="area-grid area-grid--headline">
+          {headlineAreas.map(renderAreaCard)}
+          {selectedArea === "All areas" && <article className="area-card area-card--headline area-card--placeholder" aria-label="Reserved for a future figure" />}
+        </div>}
         {salesAreas.length > 0 && <div className="area-grid area-grid--sales">{salesAreas.map(renderAreaCard)}</div>}
       </section>
     </section>
