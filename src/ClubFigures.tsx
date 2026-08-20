@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, CircleDollarSign,
-  Download, LayoutGrid, LogOut, PencilLine, Sparkles, Target, TrendingUp, Users, CalendarRange,
+  Download, Home, LogOut, PiggyBank, Settings, Target, TrendingUp, Users, CalendarRange,
 } from "lucide-react";
 import "./ClubFigures.css";
 import { supabase } from "./lib/supabase";
 import type { ClubFigure } from "./types";
+import { useClubs } from "./useClubs";
+import { FinancialYearSelector, useFinancialYear } from "./FinancialYearSelector";
 
 type Area = {
   name: string; shortName: string; value: number; target: number; previous: number;
@@ -14,6 +16,7 @@ type Area = {
 };
 type Metric = { id: string; name: string; display_order: number };
 type PeriodValue = { metric_id: string; period: number; amount: number };
+type FullYearBudget = { metric_id: string; financial_year: number; amount: number };
 type ReportingPeriod = "latest" | "ytd" | `p${number}`;
 
 const areaConfig = [
@@ -24,9 +27,33 @@ const areaConfig = [
   { name: "Slots", shortName: "Slots", colour: "#0ea5e9", softColour: "#e0f2fe", icon: "S" },
   { name: "Admissions", shortName: "Admissions", colour: "#14b8a6", softColour: "#ccfbf1", icon: "A" },
   { name: "Payroll", shortName: "Payroll", colour: "#64748b", softColour: "#e2e8f0", icon: "P" },
+  { name: "Repairs", shortName: "Repairs", colour: "#ef4444", softColour: "#fee2e2", icon: "R" },
 ];
 const periods = Array.from({ length: 12 }, (_, index) => index + 1);
-
+const buzzClubGalleries = {
+  meadowbank: {
+    page: "https://www.buzzbingo.com/club/edinburgh-meadowbank.html",
+    images: [
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707107_14411",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707114_14400",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707121_14409",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707131_14412",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707159_14406",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707193_14413",
+    ],
+  },
+  possil: {
+    page: "https://www.buzzbingo.com/club/glasgow-possil-park.html",
+    images: [
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173210_GlasgowPossilpark34",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173374_GlasgowPossilpark07",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173437_GlasgowPossilpark15",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173616_GlasgowPossilpark36",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173773_GlasgowPossilpark55",
+      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173822_GlasgowPossilpark59",
+    ],
+  },
+} as const;
 function money(value: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(value);
 }
@@ -36,36 +63,61 @@ function moneyPerHead(value: number) {
 }
 
 function ClubFigures({ session }: { session: Session }) {
-  const [selectedArea, setSelectedArea] = useState("All areas");
-  const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriod>("latest");
+  const { clubs, selectedClubId, setSelectedClubId } = useClubs();
+  const [selectedFinancialYear] = useFinancialYear();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [clubBackground, setClubBackground] = useState<{ image: string; page: string } | null>(null);
+  const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriod>("ytd");
   const [figures, setFigures] = useState<ClubFigure[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [periodValues, setPeriodValues] = useState<PeriodValue[]>([]);
   const [periodTargets, setPeriodTargets] = useState<PeriodValue[]>([]);
+  const [fullYearBudgets, setFullYearBudgets] = useState<FullYearBudget[]>([]);
   const [message, setMessage] = useState("Loading figures…");
   const [authorised, setAuthorised] = useState(false);
+  const selectedClub = clubs.find((club) => club.id === selectedClubId);
+
+  useEffect(() => {
+    const clubName = selectedClub?.name.trim().toLowerCase() ?? "";
+    const gallery = clubName.includes("meadowbank")
+      ? buzzClubGalleries.meadowbank
+      : clubName.includes("possil")
+        ? buzzClubGalleries.possil
+        : null;
+    if (!gallery) { setClubBackground(null); return; }
+    const storageKey = `club-metrics-buzz-background-${clubName}`;
+    const previousImage = localStorage.getItem(storageKey);
+    const freshImages = gallery.images.filter((image) => image !== previousImage);
+    const choices = freshImages.length ? freshImages : gallery.images;
+    const image = choices[Math.floor(Math.random() * choices.length)];
+    localStorage.setItem(storageKey, image);
+    setClubBackground({ image, page: gallery.page });
+  }, [selectedClub?.name]);
 
   useEffect(() => {
     async function load() {
+      if (!selectedClubId) return;
       const { data: access } = await supabase.from("manager_access").select("user_id").eq("user_id", session.user.id).maybeSingle();
       if (!access) {
         setMessage("Your account is waiting for manager approval.");
         return;
       }
       setAuthorised(true);
-      const [dailyResult, metricResult, actualResult, targetResult] = await Promise.all([
-        supabase.from("club_figures").select("*").order("entry_date", { ascending: false }),
+      const [dailyResult, metricResult, actualResult, targetResult, fullYearResult] = await Promise.all([
+        supabase.from("club_figures").select("*").eq("club_id",selectedClubId).order("entry_date", { ascending: false }),
         supabase.from("pnl_metrics").select("id,name,display_order").order("display_order"),
-        supabase.from("pnl_period_values").select("metric_id,period,amount"),
-        supabase.from("pnl_period_targets").select("metric_id,period,amount"),
+        supabase.from("pnl_period_values").select("metric_id,period,amount").eq("club_id",selectedClubId).eq("financial_year",selectedFinancialYear),
+        supabase.from("pnl_period_targets").select("metric_id,period,amount").eq("club_id",selectedClubId).eq("financial_year",selectedFinancialYear),
+        supabase.from("pnl_full_year_budgets").select("metric_id,financial_year,amount").eq("club_id",selectedClubId),
       ]);
-      const error = dailyResult.error ?? metricResult.error ?? actualResult.error ?? targetResult.error;
+      const error = dailyResult.error ?? metricResult.error ?? actualResult.error ?? targetResult.error ?? fullYearResult.error;
       if (error) setMessage(error.message);
       else {
         setFigures((dailyResult.data ?? []) as ClubFigure[]);
         setMetrics((metricResult.data ?? []) as Metric[]);
         setPeriodValues((actualResult.data ?? []) as PeriodValue[]);
         setPeriodTargets((targetResult.data ?? []) as PeriodValue[]);
+        setFullYearBudgets((fullYearResult.data ?? []) as FullYearBudget[]);
         setMessage("");
       }
     }
@@ -80,14 +132,14 @@ function ClubFigures({ session }: { session: Session }) {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [session.user.id]);
+  }, [selectedClubId, selectedFinancialYear, session.user.id]);
 
   const dates = [...new Set(figures.map((figure) => figure.entry_date))];
   const latest = figures.filter((figure) => figure.entry_date === dates[0]);
   const previous = figures.filter((figure) => figure.entry_date === dates[1]);
   const selectedPeriodNumber = reportingPeriod.startsWith("p") ? Number(reportingPeriod.slice(1)) : null;
   const includedPeriods = reportingPeriod === "ytd" ? periods : selectedPeriodNumber ? [selectedPeriodNumber] : [];
-  const reportLabel = reportingPeriod === "latest" ? "Latest entry" : reportingPeriod === "ytd" ? "Year to Date" : `Period ${selectedPeriodNumber}`;
+  const reportLabel = reportingPeriod === "latest" ? "Latest entry" : reportingPeriod === "ytd" ? `Year to Date · FY${selectedFinancialYear}` : `Period ${selectedPeriodNumber}`;
   const areaData: Area[] = areaConfig.map((config) => {
     if (reportingPeriod === "latest") {
       const current = latest.find((figure) => figure.area === config.name);
@@ -97,62 +149,82 @@ function ClubFigures({ session }: { session: Session }) {
     }
     const metric = metrics.find((row) => row.name === config.name);
     const actual = periodValues.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
-    const target = periodTargets.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
+    const target = reportingPeriod === "ytd"
+      ? Number(fullYearBudgets.find((row) => row.metric_id === metric?.id && row.financial_year === selectedFinancialYear)?.amount ?? 0)
+      : periodTargets.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
     const priorPeriod = selectedPeriodNumber && selectedPeriodNumber > 1 ? selectedPeriodNumber - 1 : null;
     const prior = priorPeriod ? periodValues.filter((row) => row.metric_id === metric?.id && row.period === priorPeriod).reduce((sum, row) => sum + Number(row.amount), 0) : actual;
     return { ...config, value: actual, target, previous: prior, detail: `${reportLabel} actual figure` };
   });
-  const visibleAreas = selectedArea === "All areas" ? areaData : areaData.filter((area) => area.name === selectedArea);
-  const revenueAreas = areaData.filter((area) => area.name !== "Admissions" && area.name !== "Payroll");
+  const visibleAreas = areaData;
+  const revenueAreas = areaData.filter((area) => !["Admissions", "Payroll", "Repairs"].includes(area.name));
   const payroll = areaData.find((area) => area.name === "Payroll");
-  const totals = revenueAreas.reduce((sum, area) => sum + area.value, 0) - Number(payroll?.value ?? 0);
+  const totalSales = revenueAreas.reduce((sum, area) => sum + area.value, 0);
+  const totals = totalSales - Number(payroll?.value ?? 0);
   const totalTarget = revenueAreas.reduce((sum, area) => sum + area.target, 0) - Number(payroll?.target ?? 0);
   const previousTotal = revenueAreas.reduce((sum, area) => sum + area.previous, 0) - Number(payroll?.previous ?? 0);
   const variance = previousTotal ? ((totals - previousTotal) / previousTotal) * 100 : 0;
   const activity = latest.reduce((sum, figure) => sum + Number(figure.activity_count), 0);
   const targetVariance = totals - totalTarget;
-  const areasOnTarget = areaData.filter((area) => area.target > 0 && (area.name === "Payroll" ? area.value <= area.target : area.value >= area.target)).length;
   const admissions = areaData.find((area) => area.name === "Admissions")?.value ?? 0;
+  const targetAdmissions = areaData.find((area) => area.name === "Admissions")?.target ?? 0;
+  const totalSpendPerHead = admissions > 0 ? totalSales / admissions : null;
+  const targetSales = revenueAreas.reduce((sum, area) => sum + area.target, 0);
+  const budgetSpendPerHead = targetAdmissions > 0 ? targetSales / targetAdmissions : null;
+  const spendPerHeadVariance = totalSpendPerHead !== null && budgetSpendPerHead !== null ? totalSpendPerHead - budgetSpendPerHead : null;
   const introText = reportingPeriod === "latest"
     ? (dates[0] ? `Latest figures: ${new Date(`${dates[0]}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "Enter your first figures to get started.")
     : `${reportLabel} actual figures compared with targets.`;
-  const headlineAreas = visibleAreas.filter((area) => area.name === "Admissions" || area.name === "Payroll");
-  const salesAreas = visibleAreas.filter((area) => area.name !== "Admissions" && area.name !== "Payroll");
+  const selectedClubName = selectedClub?.name ?? "Your club";
+  const headlineAreas = visibleAreas.filter((area) => ["Admissions", "Payroll", "Repairs"].includes(area.name));
+  const salesAreas = visibleAreas.filter((area) => !["Admissions", "Payroll", "Repairs"].includes(area.name));
 
   function renderAreaCard(area: Area) {
     const achieved = area.target ? (area.value / area.target) * 100 : 0;
     const change = area.previous ? ((area.value - area.previous) / area.previous) * 100 : 0;
-    const isPayroll = area.name === "Payroll";
-    const favourableChange = isPayroll ? -change : change;
-    const performanceVariance = isPayroll ? area.target - area.value : area.value - area.target;
-    const onTarget = area.target > 0 && (isPayroll ? area.value <= area.target : achieved >= 100);
+    const isCost = area.name === "Payroll" || area.name === "Repairs";
+    const favourableChange = isCost ? -change : change;
+    const performanceVariance = isCost ? area.target - area.value : area.value - area.target;
+    const onTarget = area.target > 0 && (isCost ? area.value <= area.target : achieved >= 100);
     return <article className="area-card" key={area.name} style={{ "--area-colour": area.colour, "--area-soft": area.softColour } as React.CSSProperties}>
-      <div className="area-card__top"><div className="area-card__icon">{area.icon}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
-      <h3>{area.name}</h3><p className="area-card__detail">{area.detail}</p>
-      {area.name !== "Admissions" && area.name !== "Payroll" && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
-      <div className="area-card__metric"><strong>{area.name === "Admissions" ? area.value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={favourableChange >= 0 ? "positive" : "negative"}>{favourableChange >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(favourableChange).toFixed(1)}%</span> : <span className={performanceVariance >= 0 ? "positive" : "negative"}>{area.name === "Admissions" ? performanceVariance.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : isPayroll ? `${money(Math.abs(performanceVariance))} ${performanceVariance >= 0 ? "underspend" : "overspend"}` : money(performanceVariance)}</span>}</div>
+      <div className="area-card__top"><div className="area-card__icon area-card__title-badge">{area.name}</div><span className={onTarget ? "status status--good" : "status status--watch"}>{onTarget ? "On target" : "Needs attention"}</span></div>
+      <p className="area-card__detail area-card__detail--badged">{area.detail}</p>
+      {!['Admissions', 'Payroll', 'Repairs'].includes(area.name) && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
+      <div className="area-card__metric"><strong>{area.name === "Admissions" ? area.value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={favourableChange >= 0 ? "positive" : "negative"}>{favourableChange >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(favourableChange).toFixed(1)}%</span> : <span className={performanceVariance >= 0 ? "positive" : "negative"}>{area.name === "Admissions" ? performanceVariance.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : isCost ? `${money(Math.abs(performanceVariance))} ${performanceVariance >= 0 ? "underspend" : "overspend"}` : money(performanceVariance)}</span>}</div>
       <div className="area-card__target"><div><span>Target</span><strong>{area.name === "Admissions" ? area.target.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
       <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
     </article>;
   }
 
-  return <main className="club-pulse">
+  return <main className="club-pulse" style={{ "--town-image": clubBackground ? `url("${clubBackground.image}")` : "none" } as React.CSSProperties}>
     <header className="club-pulse__header">
-      <a className="club-pulse__brand" href="/" aria-label="Club Pulse home"><span className="club-pulse__brand-mark"><Sparkles size={22} /></span><span><strong>Club</strong> Pulse</span></a>
+      <div className="header-brand-group"><a className="header-home" href="/" aria-label="Dashboard"><Home size={18}/><span>Home</span></a><a className="club-pulse__brand" href="/" aria-label="Club Metrics home"><img className="club-pulse__brand-logo" src="https://www.buzzbingo.com/library/logo.png" alt="Buzz Bingo" /><span><strong>Club</strong> Metrics</span></a></div>
+      <FinancialYearSelector />
       <div className="club-pulse__header-actions">
-        {authorised && <a className="club-pulse__admin-link club-pulse__period-link" href="/admin/periods"><CalendarRange size={16} /> P1–P12 figures</a>}
-        {authorised && <a className="club-pulse__admin-link" href="/admin"><PencilLine size={16} /> Update figures</a>}
-        <button className="club-pulse__profile" aria-label="Signed-in manager"><span>CM</span><div><strong>Club Manager</strong><small>{session.user.email}</small></div></button>
+        {authorised && <a className="club-pulse__admin-link club-pulse__period-link" href="/admin/periods"><CalendarRange size={16} /> Period Figures</a>}
+        {authorised && <a className="club-pulse__admin-link club-pulse__full-year-link" href="/admin/full-year"><PiggyBank size={16} /> Full Year</a>}
+        <div className="profile-menu">
+          <button className="club-pulse__profile" aria-label="Open manager menu" aria-expanded={profileOpen} onClick={() => setProfileOpen((open) => !open)}><span>CM</span><div><strong>Club Manager</strong><small>{session.user.email}</small></div></button>
+          {profileOpen && <div className="profile-menu__dropdown">
+            <p>MANAGER MENU</p>
+            <label>Selected club<select value={selectedClubId} onChange={(event) => setSelectedClubId(event.target.value)}>{clubs.map((club) => <option value={club.id} key={club.id}>{club.name}</option>)}</select></label>
+            <a href="/admin/clubs"><Settings size={16} /><span><strong>Manage Clubs</strong><small>Add or rename clubs</small></span></a>
+          </div>}
+        </div>
         <button className="club-pulse__icon-button" aria-label="Sign out" onClick={() => void supabase.auth.signOut()}><LogOut size={19} /></button>
       </div>
     </header>
 
     <section className="club-pulse__content">
       {message && <div className="club-pulse__notice" role="status">{message}</div>}
+      <div className="dashboard-layout">
+        <aside className="dashboard-module-rail" aria-label="Dashboard modules">
+          {Array.from({ length: 7 }, (_, index) => <div className="dashboard-module-placeholder" key={index} aria-label={`Blank left module ${index + 1}`} />)}
+        </aside>
+        <div className="dashboard-layout__main">
       <div className="club-pulse__intro">
-        <div><p className="club-pulse__eyebrow"><span /> SECURE PERFORMANCE DASHBOARD</p><h1>Your club at a glance</h1><p>{introText}</p></div>
+        <div><p className="club-pulse__eyebrow"><span /> SECURE PERFORMANCE DASHBOARD</p><h1>{selectedClubName} at a glance</h1><p>{introText}</p></div>
         <div className="club-pulse__filters">
-          <label><LayoutGrid size={17} /><select value={selectedArea} onChange={(event) => setSelectedArea(event.target.value)}><option>All areas</option>{areaData.map((area) => <option key={area.name}>{area.name}</option>)}</select><ChevronDown size={15} /></label>
           <label><CalendarDays size={17} /><select aria-label="Reporting period" value={reportingPeriod} onChange={(event) => setReportingPeriod(event.target.value as ReportingPeriod)}><option value="latest">Latest entry</option>{periods.map((period) => <option value={`p${period}`} key={period}>Period {period}</option>)}<option value="ytd">Year to Date</option></select><ChevronDown size={15} /></label>
           <button className="club-pulse__export" onClick={() => window.print()}><Download size={17} /> Export</button>
         </div>
@@ -163,10 +235,10 @@ function ClubFigures({ session }: { session: Session }) {
         <article className="summary-card"><div className="summary-card__label"><span className="mint"><Target size={18} /></span>Total target</div><div className="summary-card__value dark">{money(totalTarget)}</div><div className="summary-card__progress"><span style={{ width: `${totalTarget ? Math.min((totals / totalTarget) * 100, 100) : 0}%` }} /></div><div className="summary-card__foot neutral"><strong>{totalTarget ? Math.round((totals / totalTarget) * 100) : 0}% achieved</strong><span>{money(totals - totalTarget)} variance</span></div></article>
         {reportingPeriod === "latest" ? <>
           <article className="summary-card"><div className="summary-card__label"><span className="blue"><Users size={18} /></span>Total activity</div><div className="summary-card__value dark">{activity.toLocaleString("en-GB")}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> Live</strong><span>latest entry</span></div></article>
-          <article className="summary-card"><div className="summary-card__label"><span className="amber"><TrendingUp size={18} /></span>Revenue per activity</div><div className="summary-card__value dark">{activity ? money(totals / activity) : money(0)}</div><div className="summary-card__foot"><strong><ArrowUpRight size={16} /> Live</strong><span>latest entry</span></div></article>
+          <article className="summary-card"><div className="summary-card__label"><span className="amber"><TrendingUp size={18} /></span>Spend per head</div><div className="summary-card__value dark">{totalSpendPerHead === null ? "—" : moneyPerHead(totalSpendPerHead)}</div><div className="summary-card__foot neutral"><strong>Budget {budgetSpendPerHead === null ? "—" : moneyPerHead(budgetSpendPerHead)}</strong><span>{spendPerHeadVariance === null ? "No budget comparison" : `${spendPerHeadVariance >= 0 ? "+" : "−"}${moneyPerHead(Math.abs(spendPerHeadVariance))} vs budget`}</span></div></article>
         </> : <>
           <article className="summary-card"><div className="summary-card__label"><span className="blue"><TrendingUp size={18} /></span>Variance to target</div><div className="summary-card__value dark">{money(targetVariance)}</div><div className="summary-card__foot neutral"><strong>{targetVariance >= 0 ? "Ahead" : "Behind"}</strong><span>{reportLabel}</span></div></article>
-          <article className="summary-card"><div className="summary-card__label"><span className="amber"><Target size={18} /></span>Areas on target</div><div className="summary-card__value dark">{areasOnTarget} / {areaData.length}</div><div className="summary-card__foot neutral"><strong>{reportLabel}</strong><span>club areas</span></div></article>
+          <article className="summary-card"><div className="summary-card__label"><span className="amber"><TrendingUp size={18} /></span>Spend per head</div><div className="summary-card__value dark">{totalSpendPerHead === null ? "—" : moneyPerHead(totalSpendPerHead)}</div><div className="summary-card__foot neutral"><strong>Budget {budgetSpendPerHead === null ? "—" : moneyPerHead(budgetSpendPerHead)}</strong><span>{spendPerHeadVariance === null ? "No budget comparison" : `${spendPerHeadVariance >= 0 ? "+" : "−"}${moneyPerHead(Math.abs(spendPerHeadVariance))} vs budget`}</span></div></article>
         </>}
       </div>
 
@@ -174,10 +246,14 @@ function ClubFigures({ session }: { session: Session }) {
         <div className="club-pulse__section-title"><div><p>AREA PERFORMANCE</p><h2>How each area is doing</h2></div><div className="performance-key"><span className="great" /> On target <span className="watch" /> Needs attention</div></div>
         {headlineAreas.length > 0 && <div className="area-grid area-grid--headline">
           {headlineAreas.map(renderAreaCard)}
-          {selectedArea === "All areas" && <article className="area-card area-card--headline area-card--placeholder" aria-label="Reserved for a future figure" />}
         </div>}
         {salesAreas.length > 0 && <div className="area-grid area-grid--sales">{salesAreas.map(renderAreaCard)}</div>}
       </section>
+        </div>
+        <aside className="dashboard-module-rail dashboard-module-rail--right" aria-label="Right dashboard modules">
+          {Array.from({ length: 7 }, (_, index) => <div className="dashboard-module-placeholder" key={index} aria-label={`Blank right module ${index + 1}`} />)}
+        </aside>
+      </div>
     </section>
   </main>;
 }

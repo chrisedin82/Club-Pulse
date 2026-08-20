@@ -6,7 +6,7 @@ const supabasePublishableKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as
   ?? "sb_publishable_0JuHOsa8fe6bF31mc20mtw_eCEJyd5m";
 
 if (!supabaseUrl || !supabasePublishableKey) {
-  throw new Error("Club Pulse database configuration is missing.");
+  throw new Error("Club Metrics database configuration is missing.");
 }
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey);
