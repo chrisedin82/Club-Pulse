@@ -148,6 +148,7 @@ function ClubFigures({ session }: { session: Session }) {
     const change = area.previous ? ((area.value - area.previous) / area.previous) * 100 : 0;
     const isCost = area.name === "Payroll" || area.name === "Repairs";
     const yearOnYearChange = area.lastYear ? ((area.value - area.lastYear) / area.lastYear) * 100 : null;
+    const yearOnYearAmount = Math.abs(area.value - area.lastYear);
     const favourableYearOnYearChange = yearOnYearChange === null ? null : isCost ? -yearOnYearChange : yearOnYearChange;
     const favourableChange = isCost ? -change : change;
     const performanceVariance = isCost ? area.target - area.value : area.value - area.target;
@@ -157,7 +158,7 @@ function ClubFigures({ session }: { session: Session }) {
       <p className="area-card__detail area-card__detail--badged">{area.detail}</p>
       {!['Admissions', 'Payroll', 'Repairs'].includes(area.name) && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
       <div className="area-card__metric"><strong>{area.name === "Admissions" ? area.value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={favourableChange >= 0 ? "positive" : "negative"}>{favourableChange >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(favourableChange).toFixed(1)}%</span> : <span className={performanceVariance >= 0 ? "positive" : "negative"}>{area.name === "Admissions" ? performanceVariance.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : isCost ? `${money(Math.abs(performanceVariance))} ${performanceVariance >= 0 ? "underspend" : "overspend"}` : money(performanceVariance)}</span>}</div>
-      <div className="area-card__yoy"><span>vs FY{selectedFinancialYear - 1}</span>{favourableYearOnYearChange === null || reportingPeriod === "latest" ? <strong>—</strong> : <strong className={favourableYearOnYearChange >= 0 ? "positive" : "negative"}>{yearOnYearChange! >= 0 ? "+" : "−"}{Math.abs(yearOnYearChange!).toFixed(1)}%</strong>}</div>
+      <div className="area-card__yoy"><span>v Last Year</span>{favourableYearOnYearChange === null || reportingPeriod === "latest" ? <strong>—</strong> : <strong className={favourableYearOnYearChange >= 0 ? "positive" : "negative"}>{yearOnYearChange! >= 0 ? "+" : "−"}{Math.abs(yearOnYearChange!).toFixed(1)}% ({area.name === "Admissions" ? yearOnYearAmount.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(yearOnYearAmount)})</strong>}</div>
       <div className="area-card__target"><div><span>Target</span><strong>{area.name === "Admissions" ? area.target.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
       <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
     </article>;
