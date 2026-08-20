@@ -128,6 +128,13 @@ function ClubFigures({ session }: { session: Session }) {
   const introText = reportingPeriod === "latest"
     ? (dates[0] ? `Latest figures: ${new Date(`${dates[0]}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "Enter your first figures to get started.")
     : `${reportLabel} actual figures compared with targets.`;
+  const periodRangeText = reportingPeriod === "ytd"
+    ? completedPeriods.length
+      ? `Showing Period ${completedPeriods[0]} to Period ${completedPeriods[completedPeriods.length - 1]} · FY${selectedFinancialYear}`
+      : `No completed periods entered · FY${selectedFinancialYear}`
+    : selectedPeriodNumber
+      ? `Showing Period ${selectedPeriodNumber} · FY${selectedFinancialYear}`
+      : null;
   const selectedClubName = selectedClub?.name ?? "Your club";
   const headlineAreas = visibleAreas.filter((area) => ["Admissions", "Payroll", "Repairs"].includes(area.name));
   const salesAreas = visibleAreas.filter((area) => !["Admissions", "Payroll", "Repairs"].includes(area.name));
@@ -176,7 +183,7 @@ function ClubFigures({ session }: { session: Session }) {
         </aside>
         <div className="dashboard-layout__main">
       <div className="club-pulse__intro">
-        <div><p className="club-pulse__eyebrow"><span /> SECURE PERFORMANCE DASHBOARD</p><h1>{selectedClubName} at a glance</h1><p>{introText}</p></div>
+        <div><p className="club-pulse__eyebrow"><span /> SECURE PERFORMANCE DASHBOARD</p><h1>{selectedClubName} at a glance</h1>{periodRangeText && <p className="club-pulse__period-range"><CalendarRange size={14} />{periodRangeText}</p>}<p>{introText}</p></div>
         <div className="club-pulse__filters">
           <label><CalendarDays size={17} /><select aria-label="Reporting period" value={reportingPeriod} onChange={(event) => setReportingPeriod(event.target.value as ReportingPeriod)}><option value="latest">Latest entry</option>{periods.map((period) => <option value={`p${period}`} key={period}>Period {period}</option>)}<option value="ytd">Year to Date</option></select><ChevronDown size={15} /></label>
           <button className="club-pulse__export" onClick={() => window.print()}><Download size={17} /> Export</button>

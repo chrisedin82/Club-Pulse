@@ -23,6 +23,7 @@ body:has(.club-pulse) { margin: 0; background: #f7f8fc; }
 .club-pulse__eyebrow span { width: 7px; height: 7px; border-radius: 50%; background: #29c473; box-shadow: 0 0 0 4px #dff8eb; }
 .club-pulse__intro h1 { margin: 0; color: #242536; font-family: Manrope, sans-serif; font-size: clamp(32px, 4vw, 50px); line-height: 1.05; letter-spacing: -2.2px; }
 .club-pulse__intro p { margin: 12px 0 0; color: #777a8c; font-size: 15px; }
+.club-pulse__intro .club-pulse__period-range{display:flex;align-items:center;gap:7px;width:max-content;margin-top:12px;padding:7px 10px;color:#713064;font-size:11px;font-weight:800;border:1px solid #ead7e6;border-radius:9px;background:#fff7fc}
 .club-pulse__filters { display: flex; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
 .club-pulse__filters label, .club-pulse__export { height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: #5c6071; border: 1px solid #e2e3e9; border-radius: 11px; background: #fff; box-shadow: 0 3px 12px #252b4d08; }
 .club-pulse__filters label { position: relative; }.club-pulse__filters label > svg:last-child { pointer-events: none; }
