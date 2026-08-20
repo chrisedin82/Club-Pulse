@@ -30,30 +30,6 @@ const areaConfig = [
   { name: "Repairs", shortName: "Repairs", colour: "#ef4444", softColour: "#fee2e2", icon: "R" },
 ];
 const periods = Array.from({ length: 12 }, (_, index) => index + 1);
-const buzzClubGalleries = {
-  meadowbank: {
-    page: "https://www.buzzbingo.com/club/edinburgh-meadowbank.html",
-    images: [
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707107_14411",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707114_14400",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707121_14409",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707131_14412",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707159_14406",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/edinburgh-meadowbank/1776707193_14413",
-    ],
-  },
-  possil: {
-    page: "https://www.buzzbingo.com/club/glasgow-possil-park.html",
-    images: [
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173210_GlasgowPossilpark34",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173374_GlasgowPossilpark07",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173437_GlasgowPossilpark15",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173616_GlasgowPossilpark36",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173773_GlasgowPossilpark55",
-      "https://res.cloudinary.com/dljr9b73s/image/upload/w_1600,c_scale,q_auto,f_auto/dljr9b73s/assets/images/galleries/glasgow-possil-park/1776173822_GlasgowPossilpark59",
-    ],
-  },
-} as const;
 function money(value: number) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(value);
 }
@@ -66,7 +42,6 @@ function ClubFigures({ session }: { session: Session }) {
   const { clubs, selectedClubId, setSelectedClubId } = useClubs();
   const [selectedFinancialYear] = useFinancialYear();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [clubBackground, setClubBackground] = useState<{ image: string; page: string } | null>(null);
   const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriod>("ytd");
   const [figures, setFigures] = useState<ClubFigure[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
@@ -76,23 +51,6 @@ function ClubFigures({ session }: { session: Session }) {
   const [message, setMessage] = useState("Loading figures…");
   const [authorised, setAuthorised] = useState(false);
   const selectedClub = clubs.find((club) => club.id === selectedClubId);
-
-  useEffect(() => {
-    const clubName = selectedClub?.name.trim().toLowerCase() ?? "";
-    const gallery = clubName.includes("meadowbank")
-      ? buzzClubGalleries.meadowbank
-      : clubName.includes("possil")
-        ? buzzClubGalleries.possil
-        : null;
-    if (!gallery) { setClubBackground(null); return; }
-    const storageKey = `club-metrics-buzz-background-${clubName}`;
-    const previousImage = localStorage.getItem(storageKey);
-    const freshImages = gallery.images.filter((image) => image !== previousImage);
-    const choices = freshImages.length ? freshImages : gallery.images;
-    const image = choices[Math.floor(Math.random() * choices.length)];
-    localStorage.setItem(storageKey, image);
-    setClubBackground({ image, page: gallery.page });
-  }, [selectedClub?.name]);
 
   useEffect(() => {
     async function load() {
@@ -196,7 +154,7 @@ function ClubFigures({ session }: { session: Session }) {
     </article>;
   }
 
-  return <main className="club-pulse" style={{ "--town-image": clubBackground ? `url("${clubBackground.image}")` : "none" } as React.CSSProperties}>
+  return <main className="club-pulse">
     <header className="club-pulse__header">
       <div className="header-brand-group"><a className="header-home" href="/" aria-label="Dashboard"><Home size={18}/><span>Home</span></a><a className="club-pulse__brand" href="/" aria-label="Club Metrics home"><img className="club-pulse__brand-logo" src="https://www.buzzbingo.com/library/logo.png" alt="Buzz Bingo" /><span><strong>Club</strong> Metrics</span></a></div>
       <FinancialYearSelector />
