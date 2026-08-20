@@ -16,7 +16,6 @@ type Area = {
 };
 type Metric = { id: string; name: string; display_order: number };
 type PeriodValue = { metric_id: string; period: number; amount: number };
-type FullYearBudget = { metric_id: string; financial_year: number; amount: number };
 type ReportingPeriod = "latest" | "ytd" | `p${number}`;
 
 const areaConfig = [
@@ -47,7 +46,6 @@ function ClubFigures({ session }: { session: Session }) {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [periodValues, setPeriodValues] = useState<PeriodValue[]>([]);
   const [periodTargets, setPeriodTargets] = useState<PeriodValue[]>([]);
-  const [fullYearBudgets, setFullYearBudgets] = useState<FullYearBudget[]>([]);
   const [message, setMessage] = useState("Loading figures…");
   const [authorised, setAuthorised] = useState(false);
   const selectedClub = clubs.find((club) => club.id === selectedClubId);
@@ -61,21 +59,19 @@ function ClubFigures({ session }: { session: Session }) {
         return;
       }
       setAuthorised(true);
-      const [dailyResult, metricResult, actualResult, targetResult, fullYearResult] = await Promise.all([
+      const [dailyResult, metricResult, actualResult, targetResult] = await Promise.all([
         supabase.from("club_figures").select("*").eq("club_id",selectedClubId).order("entry_date", { ascending: false }),
         supabase.from("pnl_metrics").select("id,name,display_order").order("display_order"),
         supabase.from("pnl_period_values").select("metric_id,period,amount").eq("club_id",selectedClubId).eq("financial_year",selectedFinancialYear),
         supabase.from("pnl_period_targets").select("metric_id,period,amount").eq("club_id",selectedClubId).eq("financial_year",selectedFinancialYear),
-        supabase.from("pnl_full_year_budgets").select("metric_id,financial_year,amount").eq("club_id",selectedClubId),
       ]);
-      const error = dailyResult.error ?? metricResult.error ?? actualResult.error ?? targetResult.error ?? fullYearResult.error;
+      const error = dailyResult.error ?? metricResult.error ?? actualResult.error ?? targetResult.error;
       if (error) setMessage(error.message);
       else {
         setFigures((dailyResult.data ?? []) as ClubFigure[]);
         setMetrics((metricResult.data ?? []) as Metric[]);
         setPeriodValues((actualResult.data ?? []) as PeriodValue[]);
         setPeriodTargets((targetResult.data ?? []) as PeriodValue[]);
-        setFullYearBudgets((fullYearResult.data ?? []) as FullYearBudget[]);
         setMessage("");
       }
     }
@@ -96,7 +92,8 @@ function ClubFigures({ session }: { session: Session }) {
   const latest = figures.filter((figure) => figure.entry_date === dates[0]);
   const previous = figures.filter((figure) => figure.entry_date === dates[1]);
   const selectedPeriodNumber = reportingPeriod.startsWith("p") ? Number(reportingPeriod.slice(1)) : null;
-  const includedPeriods = reportingPeriod === "ytd" ? periods : selectedPeriodNumber ? [selectedPeriodNumber] : [];
+  const completedPeriods = periods.filter((period) => periodValues.some((row) => row.period === period && Number(row.amount) !== 0));
+  const includedPeriods = reportingPeriod === "ytd" ? completedPeriods : selectedPeriodNumber ? [selectedPeriodNumber] : [];
   const reportLabel = reportingPeriod === "latest" ? "Latest entry" : reportingPeriod === "ytd" ? `Year to Date · FY${selectedFinancialYear}` : `Period ${selectedPeriodNumber}`;
   const areaData: Area[] = areaConfig.map((config) => {
     if (reportingPeriod === "latest") {
@@ -107,9 +104,7 @@ function ClubFigures({ session }: { session: Session }) {
     }
     const metric = metrics.find((row) => row.name === config.name);
     const actual = periodValues.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
-    const target = reportingPeriod === "ytd"
-      ? Number(fullYearBudgets.find((row) => row.metric_id === metric?.id && row.financial_year === selectedFinancialYear)?.amount ?? 0)
-      : periodTargets.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
+    const target = periodTargets.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
     const priorPeriod = selectedPeriodNumber && selectedPeriodNumber > 1 ? selectedPeriodNumber - 1 : null;
     const prior = priorPeriod ? periodValues.filter((row) => row.metric_id === metric?.id && row.period === priorPeriod).reduce((sum, row) => sum + Number(row.amount), 0) : actual;
     return { ...config, value: actual, target, previous: prior, detail: `${reportLabel} actual figure` };
