@@ -11,7 +11,7 @@ import { useClubs } from "./useClubs";
 import { FinancialYearSelector, useFinancialYear } from "./FinancialYearSelector";
 
 type Area = {
-  name: string; shortName: string; value: number; target: number; previous: number;
+  name: string; shortName: string; value: number; target: number; previous: number; lastYear: number;
   colour: string; softColour: string; icon: string; detail: string;
 };
 type Metric = { id: string; name: string; display_order: number };
@@ -45,6 +45,7 @@ function ClubFigures({ session }: { session: Session }) {
   const [figures, setFigures] = useState<ClubFigure[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [periodValues, setPeriodValues] = useState<PeriodValue[]>([]);
+  const [previousYearPeriodValues, setPreviousYearPeriodValues] = useState<PeriodValue[]>([]);
   const [periodTargets, setPeriodTargets] = useState<PeriodValue[]>([]);
   const [message, setMessage] = useState("Loading figures…");
   const [authorised, setAuthorised] = useState(false);
@@ -59,18 +60,20 @@ function ClubFigures({ session }: { session: Session }) {
         return;
       }
       setAuthorised(true);
-      const [dailyResult, metricResult, actualResult, targetResult] = await Promise.all([
+      const [dailyResult, metricResult, actualResult, priorYearResult, targetResult] = await Promise.all([
         supabase.from("club_figures").select("*").eq("club_id",selectedClubId).order("entry_date", { ascending: false }),
         supabase.from("pnl_metrics").select("id,name,display_order").order("display_order"),
         supabase.from("pnl_period_values").select("metric_id,period,amount").eq("club_id",selectedClubId).eq("financial_year",selectedFinancialYear),
+        supabase.from("pnl_period_values").select("metric_id,period,amount").eq("club_id",selectedClubId).eq("financial_year",selectedFinancialYear - 1),
         supabase.from("pnl_period_targets").select("metric_id,period,amount").eq("club_id",selectedClubId).eq("financial_year",selectedFinancialYear),
       ]);
-      const error = dailyResult.error ?? metricResult.error ?? actualResult.error ?? targetResult.error;
+      const error = dailyResult.error ?? metricResult.error ?? actualResult.error ?? priorYearResult.error ?? targetResult.error;
       if (error) setMessage(error.message);
       else {
         setFigures((dailyResult.data ?? []) as ClubFigure[]);
         setMetrics((metricResult.data ?? []) as Metric[]);
         setPeriodValues((actualResult.data ?? []) as PeriodValue[]);
+        setPreviousYearPeriodValues((priorYearResult.data ?? []) as PeriodValue[]);
         setPeriodTargets((targetResult.data ?? []) as PeriodValue[]);
         setMessage("");
       }
@@ -100,14 +103,15 @@ function ClubFigures({ session }: { session: Session }) {
       const current = latest.find((figure) => figure.area === config.name);
       const prior = previous.find((figure) => figure.area === config.name);
       const label = config.name.includes("Bingo") ? "books sold" : config.name === "Diner" ? "meals served" : "activity count";
-      return { ...config, value: Number(current?.revenue ?? 0), target: Number(current?.target ?? 0), previous: Number(prior?.revenue ?? current?.revenue ?? 0), detail: `${Number(current?.activity_count ?? 0).toLocaleString("en-GB")} ${label}` };
+      return { ...config, value: Number(current?.revenue ?? 0), target: Number(current?.target ?? 0), previous: Number(prior?.revenue ?? current?.revenue ?? 0), lastYear: 0, detail: `${Number(current?.activity_count ?? 0).toLocaleString("en-GB")} ${label}` };
     }
     const metric = metrics.find((row) => row.name === config.name);
     const actual = periodValues.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
+    const lastYear = previousYearPeriodValues.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
     const target = periodTargets.filter((row) => row.metric_id === metric?.id && includedPeriods.includes(row.period)).reduce((sum, row) => sum + Number(row.amount), 0);
     const priorPeriod = selectedPeriodNumber && selectedPeriodNumber > 1 ? selectedPeriodNumber - 1 : null;
     const prior = priorPeriod ? periodValues.filter((row) => row.metric_id === metric?.id && row.period === priorPeriod).reduce((sum, row) => sum + Number(row.amount), 0) : actual;
-    return { ...config, value: actual, target, previous: prior, detail: `${reportLabel} actual figure` };
+    return { ...config, value: actual, target, previous: prior, lastYear, detail: `${reportLabel} actual figure` };
   });
   const visibleAreas = areaData;
   const revenueAreas = areaData.filter((area) => !["Admissions", "Payroll", "Repairs"].includes(area.name));
@@ -143,6 +147,8 @@ function ClubFigures({ session }: { session: Session }) {
     const achieved = area.target ? (area.value / area.target) * 100 : 0;
     const change = area.previous ? ((area.value - area.previous) / area.previous) * 100 : 0;
     const isCost = area.name === "Payroll" || area.name === "Repairs";
+    const yearOnYearChange = area.lastYear ? ((area.value - area.lastYear) / area.lastYear) * 100 : null;
+    const favourableYearOnYearChange = yearOnYearChange === null ? null : isCost ? -yearOnYearChange : yearOnYearChange;
     const favourableChange = isCost ? -change : change;
     const performanceVariance = isCost ? area.target - area.value : area.value - area.target;
     const onTarget = area.target > 0 && (isCost ? area.value <= area.target : achieved >= 100);
@@ -151,6 +157,7 @@ function ClubFigures({ session }: { session: Session }) {
       <p className="area-card__detail area-card__detail--badged">{area.detail}</p>
       {!['Admissions', 'Payroll', 'Repairs'].includes(area.name) && <div className="area-card__spend"><span>Spend per head</span><strong>{admissions > 0 ? moneyPerHead(area.value / admissions) : "—"}</strong></div>}
       <div className="area-card__metric"><strong>{area.name === "Admissions" ? area.value.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.value)}</strong>{reportingPeriod === "latest" ? <span className={favourableChange >= 0 ? "positive" : "negative"}>{favourableChange >= 0 ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}{Math.abs(favourableChange).toFixed(1)}%</span> : <span className={performanceVariance >= 0 ? "positive" : "negative"}>{area.name === "Admissions" ? performanceVariance.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : isCost ? `${money(Math.abs(performanceVariance))} ${performanceVariance >= 0 ? "underspend" : "overspend"}` : money(performanceVariance)}</span>}</div>
+      <div className="area-card__yoy"><span>vs FY{selectedFinancialYear - 1}</span>{favourableYearOnYearChange === null || reportingPeriod === "latest" ? <strong>—</strong> : <strong className={favourableYearOnYearChange >= 0 ? "positive" : "negative"}>{yearOnYearChange! >= 0 ? "+" : "−"}{Math.abs(yearOnYearChange!).toFixed(1)}%</strong>}</div>
       <div className="area-card__target"><div><span>Target</span><strong>{area.name === "Admissions" ? area.target.toLocaleString("en-GB", { maximumFractionDigits: 0 }) : money(area.target)}</strong></div><div><span>{Math.round(achieved)}%</span></div></div>
       <div className="area-card__bar"><span style={{ width: `${Math.min(achieved, 100)}%` }} /></div>
     </article>;
