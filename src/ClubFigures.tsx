@@ -164,6 +164,33 @@ function ClubFigures({ session }: { session: Session }) {
     </article>;
   }
 
+  const printableAreas = areaData;
+  const printValue = (area: Area, value: number) => area.name === "Admissions"
+    ? value.toLocaleString("en-GB", { maximumFractionDigits: 0 })
+    : money(value);
+
+  function renderPrintMetric(area: Area, index: number) {
+    const maximum = Math.max(area.value, area.target, area.lastYear, 1);
+    const barWidth = (value: number) => `${value > 0 ? Math.max(3, (value / maximum) * 100) : 0}%`;
+    const isCost = area.name === "Payroll";
+    const targetDifference = isCost ? area.target - area.value : area.value - area.target;
+    const lastYearDifference = isCost ? area.lastYear - area.value : area.value - area.lastYear;
+    const targetDescription = isCost
+      ? `${printValue(area, Math.abs(targetDifference))} ${targetDifference >= 0 ? "under" : "over"} budget`
+      : `${printValue(area, Math.abs(targetDifference))} ${targetDifference >= 0 ? "ahead" : "behind"}`;
+    const lastYearDescription = `${printValue(area, Math.abs(lastYearDifference))} ${lastYearDifference >= 0 ? "better" : "worse"}`;
+
+    return <article className="print-metric" key={area.name} style={{ "--print-accent": area.colour, "--print-soft": area.softColour } as React.CSSProperties}>
+      <div className="print-metric__heading"><div><span>METRIC</span><h2>{area.name}</h2></div><strong>{printValue(area, area.value)}</strong></div>
+      <div className={`print-metric__chart ${index >= 4 ? "print-metric__chart--columns" : ""}`}>
+        <div className="print-metric__row"><span>Actual</span><div><i style={{ width: barWidth(area.value), "--column-height": barWidth(area.value) } as React.CSSProperties} /></div><b>{printValue(area, area.value)}</b></div>
+        <div className="print-metric__row print-metric__row--target"><span>Target</span><div><i style={{ width: barWidth(area.target), "--column-height": barWidth(area.target) } as React.CSSProperties} /></div><b>{printValue(area, area.target)}</b></div>
+        <div className="print-metric__row print-metric__row--last"><span>Last year</span><div><i style={{ width: barWidth(area.lastYear), "--column-height": barWidth(area.lastYear) } as React.CSSProperties} /></div><b>{printValue(area, area.lastYear)}</b></div>
+      </div>
+      <div className="print-metric__foot"><span><small>v Budget</small><b>{targetDescription}</b></span><span><small>v Last Year</small><b>{lastYearDescription}</b></span></div>
+    </article>;
+  }
+
   return <main className="club-pulse">
     <header className="club-pulse__header">
       <div className="header-brand-group"><a className="header-home" href="/" aria-label="Dashboard"><Home size={18}/><span>Home</span></a><a className="club-pulse__brand" href="/" aria-label="Club Metrics home"><img className="club-pulse__brand-logo" src="https://www.buzzbingo.com/library/logo.png" alt="Buzz Bingo" /><span><strong>Club</strong> Metrics</span></a></div>
@@ -182,6 +209,16 @@ function ClubFigures({ session }: { session: Session }) {
         <button className="club-pulse__icon-button" aria-label="Sign out" onClick={() => void supabase.auth.signOut()}><LogOut size={19} /></button>
       </div>
     </header>
+
+    <section className="print-report" aria-label="Printable performance report">
+      <header className="print-report__header">
+        <div className="print-report__brand"><img src="https://www.buzzbingo.com/library/logo.png" alt="Buzz Bingo" /><div><span>CLUB METRICS</span><h1>{selectedClubName} performance report</h1></div></div>
+        <div className="print-report__details"><strong>FY{selectedFinancialYear}</strong><span>{periodRangeText ?? reportLabel}</span><small>Printed {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</small></div>
+      </header>
+      <div className="print-report__overview"><span><small>Total actual</small><strong>{money(totals)}</strong></span><span><small>Total target</small><strong>{money(totalTarget)}</strong></span><span><small>Variance</small><strong>{money(targetVariance)}</strong></span><span><small>Spend per head</small><strong>{totalSpendPerHead === null ? "—" : moneyPerHead(totalSpendPerHead)}</strong></span></div>
+      <div className="print-report__grid">{printableAreas.map(renderPrintMetric)}</div>
+      <footer className="print-report__footer"><span>Club Metrics · {selectedClubName}</span><span>Actual, target and prior-year comparison</span></footer>
+    </section>
 
     <section className="club-pulse__content">
       {message && <div className="club-pulse__notice" role="status">{message}</div>}
