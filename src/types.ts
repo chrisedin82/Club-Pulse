@@ -10,6 +10,7 @@ export type ClubArea = (typeof CLUB_AREAS)[number];
 
 export type ClubFigure = {
   id: string;
+  club_id: string;
   entry_date: string;
   area: ClubArea;
   revenue: number;

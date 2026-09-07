@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, CalendarRange, CheckCircle2, History, LogOut, Save, Sparkles } from "lucide-react";
+import { ArrowLeft, CalendarRange, CheckCircle2, History, LogOut, PiggyBank, Save, Sparkles } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { CLUB_AREAS, type ClubArea, type ClubFigure } from "./types";
+import { useClubs } from "./useClubs";
+import { FinancialYearSelector } from "./FinancialYearSelector";
 
 type Draft = { revenue: string; target: string; activity_count: string; notes: string };
 
 const emptyDrafts = () => Object.fromEntries(CLUB_AREAS.map((area) => [area, { revenue: "", target: "", activity_count: "", notes: "" }])) as Record<ClubArea, Draft>;
 
 function AdminPage({ session }: { session: Session }) {
+  const { clubs, selectedClubId, setSelectedClubId } = useClubs();
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   const [drafts, setDrafts] = useState(emptyDrafts);
   const [history, setHistory] = useState<ClubFigure[]>([]);
@@ -20,13 +23,13 @@ function AdminPage({ session }: { session: Session }) {
     async function initialise() {
       const { data: access } = await supabase.from("manager_access").select("user_id").eq("user_id", session.user.id).maybeSingle();
       setAuthorised(Boolean(access));
-      if (access) await loadHistory();
+      if (access && selectedClubId) await loadHistory();
     }
     void initialise();
-  }, [session.user.id]);
+  }, [selectedClubId, session.user.id]);
 
   async function loadHistory() {
-    const { data } = await supabase.from("club_figures").select("*").order("entry_date", { ascending: false }).limit(50);
+    const { data } = await supabase.from("club_figures").select("*").eq("club_id",selectedClubId).order("entry_date", { ascending: false }).limit(50);
     setHistory((data ?? []) as ClubFigure[]);
   }
 
@@ -49,6 +52,7 @@ function AdminPage({ session }: { session: Session }) {
     setMessage("");
     const rows = CLUB_AREAS.map((area) => ({
       entry_date: entryDate,
+      club_id: selectedClubId,
       area,
       revenue: Number(drafts[area].revenue || 0),
       target: Number(drafts[area].target || 0),
@@ -57,7 +61,7 @@ function AdminPage({ session }: { session: Session }) {
       created_by: session.user.id,
       updated_at: new Date().toISOString(),
     }));
-    const { error } = await supabase.from("club_figures").upsert(rows, { onConflict: "entry_date,area" });
+    const { error } = await supabase.from("club_figures").upsert(rows, { onConflict: "club_id,entry_date,area" });
     setMessage(error ? error.message : "Figures saved successfully.");
     if (!error) await loadHistory();
     setSaving(false);
@@ -68,9 +72,9 @@ function AdminPage({ session }: { session: Session }) {
 
   const dates = [...new Set(history.map((row) => row.entry_date))];
   return <main className="admin-shell">
-    <header className="admin-header"><a className="club-pulse__brand" href="/"><span className="club-pulse__brand-mark"><Sparkles size={22} /></span><span><strong>Club</strong> Pulse</span></a><div><a href="/admin/periods"><CalendarRange size={16} /> P1–P12 figures</a><a href="/"><ArrowLeft size={16} /> Dashboard</a><button onClick={() => void supabase.auth.signOut()}><LogOut size={16} /> Sign out</button></div></header>
+    <header className="admin-header"><a className="club-pulse__brand" href="/"><img className="club-pulse__brand-logo" src="https://www.buzzbingo.com/library/logo.png" alt="Buzz Bingo" /><span><strong>Club</strong> Metrics</span></a><FinancialYearSelector /><div><a href="/admin/periods"><CalendarRange size={16} /> Period Figures</a><a href="/admin/full-year"><PiggyBank size={16} /> Full Year</a><a href="/"><ArrowLeft size={16} /> Dashboard</a><button onClick={() => void supabase.auth.signOut()}><LogOut size={16} /> Sign out</button></div></header>
     <section className="admin-content">
-      <div className="admin-title"><div><p>MANAGER ENTRY</p><h1>Update club figures</h1><span>Enter one complete set of figures for each trading date.</span></div><label>Trading date<input type="date" value={entryDate} onChange={(event) => void loadDate(event.target.value)} /></label></div>
+      <div className="admin-title"><div><p>MANAGER ENTRY</p><h1>Update club figures</h1><span>Enter one complete set of figures for each trading date.</span></div><div className="admin-title__filters"><label>Club<select value={selectedClubId} onChange={event=>setSelectedClubId(event.target.value)}>{clubs.map(club=><option value={club.id} key={club.id}>{club.name}</option>)}</select></label><label>Trading date<input type="date" value={entryDate} onChange={(event) => void loadDate(event.target.value)} /></label></div></div>
       <form onSubmit={saveFigures}>
         <div className="entry-grid">{CLUB_AREAS.map((area, index) => <fieldset className="entry-card" key={area}><legend><span>{index + 1}</span>{area}</legend><div className="entry-fields"><label>Revenue (£)<input type="number" min="0" step="0.01" value={drafts[area].revenue} onChange={(event) => update(area, "revenue", event.target.value)} required /></label><label>Target (£)<input type="number" min="0" step="0.01" value={drafts[area].target} onChange={(event) => update(area, "target", event.target.value)} required /></label><label>Activity count<input type="number" min="0" step="1" value={drafts[area].activity_count} onChange={(event) => update(area, "activity_count", event.target.value)} required /></label><label>Note<input type="text" maxLength={120} placeholder="e.g. books sold" value={drafts[area].notes} onChange={(event) => update(area, "notes", event.target.value)} /></label></div></fieldset>)}</div>
         <div className="admin-save"><div>{message && <span className={message.includes("successfully") ? "save-success" : "save-error"}>{message.includes("successfully") && <CheckCircle2 size={17} />}{message}</span>}</div><button type="submit" disabled={saving}><Save size={17} />{saving ? "Saving…" : "Save all figures"}</button></div>

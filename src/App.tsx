@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { LockKeyhole, Sparkles } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 import ClubFigures from "./ClubFigures";
-import AdminPage from "./AdminPage";
 import PeriodsPage from "./PeriodsPage";
+import FullYearPage from "./FullYearPage";
+import ClubsPage from "./ClubsPage";
 import { supabase } from "./lib/supabase";
 
 function App() {
@@ -44,12 +45,12 @@ function App() {
     setSubmitting(false);
   }
 
-  if (loading) return <main className="auth-screen"><div className="auth-card">Loading Club Pulse…</div></main>;
+  if (loading) return <main className="auth-screen"><div className="auth-card">Loading Club Metrics…</div></main>;
 
   if (!session) {
     return <main className="auth-screen">
       <section className="auth-card">
-        <div className="auth-brand"><span><Sparkles size={22} /></span><strong>Club Pulse</strong></div>
+        <div className="auth-brand"><img src="https://www.buzzbingo.com/library/logo.png" alt="Buzz Bingo" /><strong>Club Metrics</strong></div>
         <div className="auth-lock"><LockKeyhole size={24} /></div>
         <p className="auth-eyebrow">MANAGER ACCESS</p>
         <h1>Sign in to your club dashboard</h1>
@@ -65,8 +66,10 @@ function App() {
     </main>;
   }
 
+  if (window.location.pathname.startsWith("/admin/clubs")) return <ClubsPage session={session} />;
+  if (window.location.pathname.startsWith("/admin/full-year")) return <FullYearPage session={session} />;
   if (window.location.pathname.startsWith("/admin/periods")) return <PeriodsPage session={session} />;
-  if (window.location.pathname.startsWith("/admin")) return <AdminPage session={session} />;
+  if (window.location.pathname.startsWith("/admin")) return <ClubFigures session={session} />;
   return <ClubFigures session={session} />;
 }
 
